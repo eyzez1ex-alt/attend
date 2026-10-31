@@ -1,16 +1,100 @@
-/** API contract boundary. Implementations intentionally make no network or persistence calls. */
+import {
+  browserLocalPersistence,
+  browserSessionPersistence,
+  onAuthStateChanged,
+  sendPasswordResetEmail,
+  setPersistence,
+  signInWithEmailAndPassword,
+  signOut,
+  type User,
+} from 'firebase/auth'
+import { MODERATOR_OWNER_EMAIL } from '../constants/access'
+import { firebaseAuth, firebaseConfigured } from './firebase'
+import type { AuthSession, SystemRole } from '../types'
+
+/** API contract boundary. Authentication uses Firebase; data services stay unconfigured until SQL Connect is deployed. */
 export interface ApiError { message: string; code?: string }
 export interface ApiResult<T> { data: T | null; error: ApiError | null }
 
 const pending = <T>(): Promise<ApiResult<T>> => Promise.resolve({
   data: null,
-  error: { code: 'API_NOT_CONFIGURED', message: 'واجهة الخدمة جاهزة، لكن لم يتم ربط الخادم بعد.' },
+  error: { code: 'SQL_CONNECT_NOT_CONFIGURED', message: 'تم إعداد Firebase Authentication. يلزم إعداد خدمة SQL Connect قبل تحميل بيانات النظام أو حفظها.' },
 })
 
+function firebaseError(error: unknown): ApiError {
+  const code = typeof error === 'object' && error && 'code' in error ? String(error.code) : 'FIREBASE_ERROR'
+  const messages: Record<string, string> = {
+    'auth/invalid-credential': 'بيانات تسجيل الدخول غير صحيحة.',
+    'auth/user-not-found': 'بيانات تسجيل الدخول غير صحيحة.',
+    'auth/wrong-password': 'بيانات تسجيل الدخول غير صحيحة.',
+    'auth/too-many-requests': 'تم إيقاف المحاولة مؤقتاً. حاول لاحقاً.',
+    'auth/network-request-failed': 'تعذر الاتصال بخدمة المصادقة. تحقق من اتصال الإنترنت.',
+    'auth/operation-not-allowed': 'فعّل طريقة البريد الإلكتروني وكلمة المرور في Firebase Authentication.',
+    'auth/unauthorized-domain': 'أضف نطاق التطبيق إلى النطاقات المصرح بها في Firebase Authentication.',
+  }
+  return { code, message: messages[code] ?? 'تعذر إكمال طلب المصادقة. تحقق من إعداد Firebase وحالة الحساب.' }
+}
+
+async function sessionForUser(user: User): Promise<ApiResult<AuthSession>> {
+  const token = await user.getIdTokenResult()
+  const claims = token.claims
+  const email = user.email?.trim().toLocaleLowerCase() ?? ''
+  const claimRole = claims.role
+  let role: SystemRole | null = null
+
+  if (email === MODERATOR_OWNER_EMAIL && user.emailVerified) role = 'owner'
+  else if ((claimRole === 'moderator' || claimRole === 'admin' || claims.moderator === true || claims.admin === true) && user.emailVerified) role = 'moderator'
+  else if (claimRole === 'employee' && user.emailVerified) role = 'employee'
+
+  if (!role) {
+    return { data: null, error: { code: 'ROLE_NOT_CONFIGURED', message: 'تم التحقق من الحساب، لكن لم يُضف له دور نظام موثّق بعد.' } }
+  }
+  return { data: { userId: user.uid, email, role }, error: null }
+}
+
 export const authService = {
-  login: (_credentials: { email: string; accessCode: string; password: string }) => pending<never>(),
-  getCurrentUser: () => pending<import('../types').AuthSession>(),
-  logout: () => pending<void>(),
+  login: async (credentials: { email: string; accessCode: string; password: string; remember?: boolean }): Promise<ApiResult<AuthSession>> => {
+    if (!firebaseConfigured || !firebaseAuth) return { data: null, error: { code: 'FIREBASE_NOT_CONFIGURED', message: 'إعداد Firebase غير مكتمل. راجع ملف .env.local ثم أعد تشغيل التطبيق.' } }
+    try {
+      await setPersistence(firebaseAuth, credentials.remember ? browserLocalPersistence : browserSessionPersistence)
+      const result = await signInWithEmailAndPassword(firebaseAuth, credentials.email.trim(), credentials.password)
+      const session = await sessionForUser(result.user)
+      if (session.data?.role === 'employee') {
+        const token = await result.user.getIdTokenResult()
+        const registeredCode = String(token.claims.employeeCode ?? token.claims.employee_id ?? '').trim().toLocaleLowerCase()
+        if (!registeredCode || registeredCode !== credentials.accessCode.trim().toLocaleLowerCase()) {
+          await signOut(firebaseAuth)
+          return { data: null, error: { code: 'EMPLOYEE_CODE_MISMATCH', message: 'رقم الموظف أو رمز الدخول غير مطابق للحساب.' } }
+        }
+      }
+      if (!session.data) await signOut(firebaseAuth)
+      return session
+    } catch (error) {
+      return { data: null, error: firebaseError(error) }
+    }
+  },
+  getCurrentUser: async (): Promise<ApiResult<AuthSession>> => {
+    if (!firebaseConfigured || !firebaseAuth) return { data: null, error: { code: 'FIREBASE_NOT_CONFIGURED', message: 'إعداد Firebase غير مكتمل.' } }
+    if (!firebaseAuth.currentUser) return { data: null, error: null }
+    try { return await sessionForUser(firebaseAuth.currentUser) } catch (error) { return { data: null, error: firebaseError(error) } }
+  },
+  onSessionChanged: (callback: (result: ApiResult<AuthSession>) => void) => {
+    if (!firebaseAuth) { callback({ data: null, error: null }); return () => undefined }
+    return onAuthStateChanged(firebaseAuth, async user => {
+      if (!user) { callback({ data: null, error: null }); return }
+      try { callback(await sessionForUser(user)) } catch (error) { callback({ data: null, error: firebaseError(error) }) }
+    })
+  },
+  sendPasswordReset: async (email: string): Promise<ApiResult<void>> => {
+    if (!firebaseAuth) return { data: null, error: { code: 'FIREBASE_NOT_CONFIGURED', message: 'إعداد Firebase غير مكتمل.' } }
+    try { await sendPasswordResetEmail(firebaseAuth, email.trim()); return { data: undefined, error: null } }
+    catch (error) { return { data: null, error: firebaseError(error) } }
+  },
+  logout: async (): Promise<ApiResult<void>> => {
+    if (!firebaseAuth) return { data: null, error: { code: 'FIREBASE_NOT_CONFIGURED', message: 'إعداد Firebase غير مكتمل.' } }
+    try { await signOut(firebaseAuth); return { data: undefined, error: null } }
+    catch (error) { return { data: null, error: firebaseError(error) } }
+  },
 }
 export const employeeService = {
   getEmployees: () => pending<import('../types').Employee[]>(),

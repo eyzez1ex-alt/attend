@@ -1,0 +1,13 @@
+specVersion: "v1"
+serviceId: "REPLACE_WITH_SQL_CONNECT_SERVICE_ID"
+location: "REPLACE_WITH_SERVICE_LOCATION"
+schema:
+  source: "schema"
+  datasource:
+    postgresql:
+      database: "REPLACE_WITH_POSTGRES_DATABASE_NAME"
+      cloudSql:
+        instanceId: "REPLACE_WITH_CLOUD_SQL_INSTANCE_ID"
+        schemaValidation: "COMPATIBLE"
+connectorDirs:
+  - "connector"

@@ -6,6 +6,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import type { Attendance, AttendanceStatus, AuditEntry, Employee, ModeratorAccess, MonthlyReportArchiveItem, OfficialHoliday, Vacation } from '../types'
 import { Button, EmptyState, FormField, MetricCard, Modal, MonthCalendar, PageHeading, StatusBadge, type CalendarMark } from '../components/UI'
 import { MODERATOR_OWNER_EMAIL, canDownloadModeratorReports, canGrantModeratorAccess } from '../constants/access'
+import { useAuthSession } from '../hooks/useAuthSession'
 import { accessService, monthlyReportService } from '../services/api'
 
 const holidayLabels: Record<OfficialHoliday['category'], string> = { national: 'وطنية', religious: 'دينية', government: 'بقرار حكومي', postponed: 'مؤجلة رسمياً', special: 'مناسبة خاصة', weekly: 'أسبوعية' }
@@ -93,8 +94,8 @@ export function AccessManagementPage() {
   const [draftEmail, setDraftEmail] = useState('')
   const [dialog, setDialog] = useState(false)
   const [notice, setNotice] = useState('')
-  // Authentication is intentionally unimplemented; connect this to the verified API session.
-  const authenticatedEmail: string | null = null
+  const { session } = useAuthSession()
+  const authenticatedEmail = session?.email ?? null
   const canManage = canGrantModeratorAccess(authenticatedEmail)
   const openInvite = () => {
     if (!canManage) { setNotice('يلزم التحقق من جلسة المالك عبر خدمة المصادقة قبل منح صلاحيات المشرف.'); return }
@@ -296,8 +297,8 @@ export function ReportsPage() {
   const [monthlyArchive, setMonthlyArchive] = useState<MonthlyReportArchiveItem[]>([])
   const [monthlyLoaded, setMonthlyLoaded] = useState(false)
   const [monthlyLoading, setMonthlyLoading] = useState(false)
-  // Replace with the verified role from the future authentication service.
-  const authenticatedRole: import('../types').SystemRole | null = null
+  const { session } = useAuthSession()
+  const authenticatedRole = session?.role ?? null
   const canDownloadMonthly = canDownloadModeratorReports(authenticatedRole)
   const reportNames: Record<string, string> = { monthly: 'تقرير الحضور الشهري', summaries: 'ملخصات الموظفين', absences: 'تقرير الغياب', vacations: 'تقرير الإجازات', late: 'تقرير التأخيرات' }
   const exportReport = (format: string) => setNotice(`تصدير ${format} جاهز للربط. لا توجد بيانات لتصديرها حالياً.`)

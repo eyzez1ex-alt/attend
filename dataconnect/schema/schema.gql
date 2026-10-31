@@ -1,0 +1,153 @@
+enum DeviceStatus {
+  ASSIGNED
+  UNASSIGNED
+  DISABLED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+  ON_LEAVE
+  OFFICIAL_HOLIDAY
+  WEEKLY_HOLIDAY
+}
+
+enum LocationCheckStatus {
+  NOT_CHECKED
+  INSIDE
+  OUTSIDE
+  UNAVAILABLE
+}
+
+enum VacationType {
+  ANNUAL
+  SICK
+  EMERGENCY
+  UNPAID
+  OTHER
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum HolidayCategory {
+  NATIONAL
+  RELIGIOUS
+  GOVERNMENT
+  POSTPONED
+  ADMIN_SPECIAL
+  WEEKLY
+}
+
+enum ConfirmationStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+type Employee @table(key: "firebaseUid") {
+  firebaseUid: String!
+  employeeCode: String! @unique
+  fullName: String!
+  email: String! @unique
+  department: String
+  isActive: Boolean! @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type Device @table(key: "employee") {
+  employee: Employee!
+  fingerprintHash: String
+  status: DeviceStatus! @default(value: UNASSIGNED)
+  assignedAt: Timestamp
+  lastSeenAt: Timestamp
+}
+
+type Attendance @table(key: ["employee", "workDate"]) {
+  employee: Employee!
+  workDate: Date!
+  checkInAt: Timestamp
+  checkOutAt: Timestamp
+  checkInLatitude: Float
+  checkInLongitude: Float
+  checkOutLatitude: Float
+  checkOutLongitude: Float
+  status: AttendanceStatus
+  locationCheckStatus: LocationCheckStatus! @default(value: NOT_CHECKED)
+  administratorNote: String
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp
+}
+
+type Vacation @table {
+  employee: Employee!
+  vacationType: VacationType!
+  startDate: Date!
+  endDate: Date!
+  totalWorkingDays: Int
+  status: ApprovalStatus! @default(value: PENDING)
+  requestNote: String
+  decisionNote: String
+  reviewedByUid: String
+  createdAt: Timestamp! @default(expr: "request.time")
+  reviewedAt: Timestamp
+}
+
+type OfficialHoliday @table {
+  holidayName: String!
+  holidayDate: Date!
+  category: HolidayCategory!
+  announcementSource: String
+  sourceUrl: String
+  confirmationStatus: ConfirmationStatus! @default(value: PENDING)
+  notes: String
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp
+}
+
+type WeeklyHolidayRule @table(key: "weekday") {
+  # ISO weekday number: Monday=1 through Sunday=7. No days are preconfigured.
+  weekday: Int!
+  isEnabled: Boolean! @default(value: true)
+  label: String
+}
+
+type WorkLocation @table {
+  locationName: String!
+  latitude: Float
+  longitude: Float
+  radiusMeters: Int! @default(value: 600)
+  isActive: Boolean! @default(value: true)
+  updatedByUid: String
+  updatedAt: Timestamp
+}
+
+type ModeratorAccess @table(key: "firebaseUid") {
+  firebaseUid: String!
+  email: String! @unique
+  status: ApprovalStatus! @default(value: PENDING)
+  grantedByUid: String!
+  grantedAt: Timestamp! @default(expr: "request.time")
+  revokedAt: Timestamp
+}
+
+type AdminLog @table {
+  actorUid: String!
+  targetEmployee: Employee
+  action: String!
+  previousValueJson: String
+  newValueJson: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}
+
+type MonthlyReport @table(key: ["reportYear", "reportMonth"]) {
+  reportYear: Int!
+  reportMonth: Int!
+  storagePath: String
+  generatedAt: Timestamp
+  generationStatus: String!
+}
