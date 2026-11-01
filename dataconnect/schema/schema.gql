@@ -49,6 +49,12 @@ enum ConfirmationStatus {
   CANCELLED
 }
 
+enum ModeratorStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
 type Employee @table(key: "firebaseUid") {
   firebaseUid: String!
   employeeCode: String! @unique
@@ -116,7 +122,8 @@ type WeeklyHolidayRule @table(key: "weekday") {
   label: String
 }
 
-type WorkLocation @table {
+type WorkLocation @table(key: "locationKey") {
+  locationKey: String!
   locationName: String!
   latitude: Float
   longitude: Float
@@ -129,7 +136,7 @@ type WorkLocation @table {
 type ModeratorAccess @table(key: "firebaseUid") {
   firebaseUid: String!
   email: String! @unique
-  status: ApprovalStatus! @default(value: PENDING)
+  status: ModeratorStatus! @default(value: PENDING)
   grantedByUid: String!
   grantedAt: Timestamp! @default(expr: "request.time")
   revokedAt: Timestamp
@@ -139,8 +146,8 @@ type AdminLog @table {
   actorUid: String!
   targetEmployee: Employee
   action: String!
-  previousValueJson: String
-  newValueJson: String
+  previousValue: String
+  newValue: String
   createdAt: Timestamp! @default(expr: "request.time")
 }
 

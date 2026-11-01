@@ -4,11 +4,13 @@ export type SystemRole = 'owner' | 'moderator' | 'employee'
 
 export interface Employee {
   id: string
+  /** Firebase Authentication UID; kept distinct from the employee-facing code. */
+  accountUid?: string
   name: string
   email: string
   department: string
   active: boolean
-  device: 'assigned' | 'unassigned'
+  device: 'assigned' | 'unassigned' | 'unknown'
 }
 
 export interface Admin { id: string; name: string; email: string }
@@ -38,6 +40,7 @@ export interface MonthlyReportArchiveItem {
   month: number
   generatedAt: string
   formats: Array<'pdf' | 'csv'>
+  storagePath?: string
 }
 export interface Device { id: string; status: 'assigned' | 'unassigned'; lastSeenAt?: string }
 export interface Attendance {
@@ -73,6 +76,7 @@ export interface OfficialHoliday {
   date: string
   category: 'national' | 'religious' | 'government' | 'postponed' | 'special' | 'weekly'
   announcementSource: string
+  sourceUrl?: string
   confirmed: boolean
   notes?: string
 }

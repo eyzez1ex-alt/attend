@@ -1,0 +1,343 @@
+# SQL Connect uses these operation-level authorization rules instead of Firestore rules.
+# Manager access requires a verified owner email or a verified moderator/admin claim.
+
+query GetMyEmployeeProfile @auth(level: USER_EMAIL_VERIFIED) {
+  employees(where: { firebaseUid: { eq_expr: "auth.uid" } }, limit: 1) {
+    firebaseUid
+    employeeCode
+    fullName
+    email
+    department
+    isActive
+  }
+}
+
+query GetMyAttendance @auth(level: USER_EMAIL_VERIFIED) {
+  attendances(
+    where: { employeeFirebaseUid: { eq_expr: "auth.uid" } }
+    orderBy: { workDate: DESC }
+    limit: 500
+  ) {
+    employeeFirebaseUid
+    employee { employeeCode fullName }
+    workDate
+    checkInAt
+    checkOutAt
+    checkInLatitude
+    checkInLongitude
+    checkOutLatitude
+    checkOutLongitude
+    status
+    locationCheckStatus
+  }
+}
+
+query GetMyVacations @auth(level: USER_EMAIL_VERIFIED) {
+  vacations(
+    where: { employeeFirebaseUid: { eq_expr: "auth.uid" } }
+    orderBy: { createdAt: DESC }
+    limit: 200
+  ) {
+    id
+    employee { employeeCode fullName }
+    vacationType
+    startDate
+    endDate
+    totalWorkingDays
+    status
+    requestNote
+    decisionNote
+    createdAt
+  }
+}
+
+query ListEmployees @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") {
+  employees(orderBy: { fullName: ASC }, limit: 500) {
+    firebaseUid
+    employeeCode
+    fullName
+    email
+    department
+    isActive
+    createdAt
+  }
+}
+
+query ListAttendanceByRange($fromDate: Date!, $toDate: Date!) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") {
+  attendances(
+    where: { workDate: { ge: $fromDate, le: $toDate } }
+    orderBy: { workDate: DESC }
+    limit: 2000
+  ) {
+    employeeFirebaseUid
+    employee { employeeCode fullName }
+    workDate
+    checkInAt
+    checkOutAt
+    status
+    locationCheckStatus
+    administratorNote
+  }
+}
+
+query ListAttendanceForEmployeeByRange($employeeUid: String!, $fromDate: Date!, $toDate: Date!) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") {
+  attendances(
+    where: {
+      employeeFirebaseUid: { eq: $employeeUid }
+      workDate: { ge: $fromDate, le: $toDate }
+    }
+    orderBy: { workDate: DESC }
+    limit: 2000
+  ) {
+    employeeFirebaseUid
+    employee { employeeCode fullName }
+    workDate
+    checkInAt
+    checkOutAt
+    status
+    locationCheckStatus
+    administratorNote
+  }
+}
+
+query ListVacationRequests @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") {
+  vacations(orderBy: { createdAt: DESC }, limit: 1000) {
+    id
+    employeeFirebaseUid
+    employee { employeeCode fullName }
+    vacationType
+    startDate
+    endDate
+    totalWorkingDays
+    status
+    requestNote
+    decisionNote
+    reviewedByUid
+    createdAt
+    reviewedAt
+  }
+}
+
+mutation CreateAdminVacationRequest($employeeUid: String!, $vacationType: VacationType!, $startDate: Date!, $endDate: Date!, $requestNote: String) @auth(expr: "auth.token.email_verified && vars.startDate <= vars.endDate && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") @transaction {
+  vacation_insert(data: {
+    employeeFirebaseUid: $employeeUid
+    vacationType: $vacationType
+    startDate: $startDate
+    endDate: $endDate
+    requestNote: $requestNote
+  })
+  adminLog_insert(data: {
+    actorUid_expr: "auth.uid"
+    action: "VACATION_CREATED_BY_ADMIN"
+    newValue: $requestNote
+  })
+}
+
+mutation UpdateVacationRequest($id: UUID!, $vacationType: VacationType!, $startDate: Date!, $endDate: Date!, $requestNote: String) @auth(expr: "auth.token.email_verified && vars.startDate <= vars.endDate && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") @transaction {
+  vacation_update(id: $id, data: {
+    vacationType: $vacationType
+    startDate: $startDate
+    endDate: $endDate
+    requestNote: $requestNote
+  })
+  adminLog_insert(data: {
+    actorUid_expr: "auth.uid"
+    action: "VACATION_UPDATED"
+    newValue: $requestNote
+  })
+}
+
+query ListOfficialHolidaysForRange($fromDate: Date!, $toDate: Date!) @auth(level: USER_EMAIL_VERIFIED) {
+  officialHolidays(
+    where: { holidayDate: { ge: $fromDate, le: $toDate } }
+    orderBy: { holidayDate: ASC }
+    limit: 500
+  ) {
+    id
+    holidayName
+    holidayDate
+    category
+    announcementSource
+    sourceUrl
+    confirmationStatus
+    notes
+  }
+}
+
+query GetOfficialHolidayById($id: UUID!) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") {
+  officialHolidays(where: { id: { eq: $id } }, limit: 1) {
+    id
+    holidayName
+    holidayDate
+    category
+    announcementSource
+    sourceUrl
+    confirmationStatus
+    notes
+  }
+}
+
+query GetActiveWorkLocation @auth(level: USER_EMAIL_VERIFIED) {
+  workLocations(where: { locationKey: { eq: "primary" }, isActive: { eq: true } }, limit: 1) {
+    locationKey
+    locationName
+    latitude
+    longitude
+    radiusMeters
+    isActive
+    updatedAt
+  }
+}
+
+query ListWeeklyHolidayRules @auth(level: USER_EMAIL_VERIFIED) {
+  weeklyHolidayRules(where: { isEnabled: { eq: true } }, orderBy: { weekday: ASC }) {
+    weekday
+    isEnabled
+    label
+  }
+}
+
+query ListMonthlyReports @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") {
+  monthlyReports(orderBy: { reportYear: DESC }, limit: 120) {
+    reportYear
+    reportMonth
+    storagePath
+    generatedAt
+    generationStatus
+  }
+}
+
+query ListModeratorAccess @auth(expr: "auth.token.email_verified && auth.token.email == 'yusufgibrel3@gmail.com'") {
+  moderatorAccesses(orderBy: { grantedAt: DESC }, limit: 500) {
+    firebaseUid
+    email
+    status
+    grantedByUid
+    grantedAt
+    revokedAt
+  }
+}
+
+query ListAdminLogs @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") {
+  adminLogs(orderBy: { createdAt: DESC }, limit: 500) {
+    id
+    actorUid
+    action
+    previousValue
+    newValue
+    createdAt
+    targetEmployee { employeeCode fullName }
+  }
+}
+
+mutation CreateVacationRequest($vacationType: VacationType!, $startDate: Date!, $endDate: Date!, $requestNote: String) @auth(expr: "auth.uid != nil && auth.token.email_verified && vars.startDate <= vars.endDate") {
+  vacation_insert(data: {
+    employeeFirebaseUid_expr: "auth.uid"
+    vacationType: $vacationType
+    startDate: $startDate
+    endDate: $endDate
+    requestNote: $requestNote
+  })
+}
+
+mutation ApproveVacation($id: UUID!, $decisionNote: String) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") @transaction {
+  vacation_update(id: $id, data: {
+    status: APPROVED
+    decisionNote: $decisionNote
+    reviewedByUid_expr: "auth.uid"
+    reviewedAt_expr: "request.time"
+  })
+  adminLog_insert(data: {
+    actorUid_expr: "auth.uid"
+    action: "VACATION_APPROVED"
+    newValue: $decisionNote
+  })
+}
+
+mutation RejectVacation($id: UUID!, $decisionNote: String) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") @transaction {
+  vacation_update(id: $id, data: {
+    status: REJECTED
+    decisionNote: $decisionNote
+    reviewedByUid_expr: "auth.uid"
+    reviewedAt_expr: "request.time"
+  })
+  adminLog_insert(data: {
+    actorUid_expr: "auth.uid"
+    action: "VACATION_REJECTED"
+    newValue: $decisionNote
+  })
+}
+
+mutation CreateOfficialHoliday($holidayName: String!, $holidayDate: Date!, $category: HolidayCategory!, $announcementSource: String, $sourceUrl: String, $confirmationStatus: ConfirmationStatus!, $notes: String) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") @transaction {
+  officialHoliday_insert(data: {
+    holidayName: $holidayName
+    holidayDate: $holidayDate
+    category: $category
+    announcementSource: $announcementSource
+    sourceUrl: $sourceUrl
+    confirmationStatus: $confirmationStatus
+    notes: $notes
+  })
+  adminLog_insert(data: {
+    actorUid_expr: "auth.uid"
+    action: "HOLIDAY_CREATED"
+    newValue: $holidayName
+  })
+}
+
+mutation ConfirmOfficialHoliday($id: UUID!) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") @transaction {
+  officialHoliday_update(id: $id, data: {
+    confirmationStatus: CONFIRMED
+    updatedAt_expr: "request.time"
+  })
+  adminLog_insert(data: {
+    actorUid_expr: "auth.uid"
+    action: "HOLIDAY_CONFIRMED"
+    newValue: "CONFIRMED"
+  })
+}
+
+mutation UpdateOfficialHoliday($id: UUID!, $holidayName: String!, $holidayDate: Date!, $category: HolidayCategory!, $announcementSource: String, $sourceUrl: String, $confirmationStatus: ConfirmationStatus!, $notes: String) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") @transaction {
+  officialHoliday_update(id: $id, data: {
+    holidayName: $holidayName
+    holidayDate: $holidayDate
+    category: $category
+    announcementSource: $announcementSource
+    sourceUrl: $sourceUrl
+    confirmationStatus: $confirmationStatus
+    notes: $notes
+    updatedAt_expr: "request.time"
+  })
+  adminLog_insert(data: {
+    actorUid_expr: "auth.uid"
+    action: "HOLIDAY_UPDATED"
+    newValue: $holidayName
+  })
+}
+
+mutation DeleteOfficialHoliday($id: UUID!) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") @transaction {
+  officialHoliday_delete(id: $id)
+  adminLog_insert(data: {
+    actorUid_expr: "auth.uid"
+    action: "HOLIDAY_DELETED"
+    previousValue: $id
+  })
+}
+
+mutation SaveWorkLocation($locationName: String!, $latitude: Float!, $longitude: Float!) @auth(expr: "auth.token.email_verified && (auth.token.email == 'yusufgibrel3@gmail.com' || auth.token.role == 'moderator' || auth.token.role == 'admin' || auth.token.moderator == true || auth.token.admin == true)") @transaction {
+  workLocation_upsert(data: {
+    locationKey: "primary"
+    locationName: $locationName
+    latitude: $latitude
+    longitude: $longitude
+    radiusMeters: 600
+    isActive: true
+    updatedByUid_expr: "auth.uid"
+    updatedAt_expr: "request.time"
+  })
+  adminLog_insert(data: {
+    actorUid_expr: "auth.uid"
+    action: "WORK_LOCATION_UPDATED"
+    newValue: $locationName
+  })
+}

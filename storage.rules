@@ -1,0 +1,26 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isVerifiedManager() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && (
+          request.auth.token.email == 'yusufgibrel3@gmail.com'
+          || request.auth.token.role == 'moderator'
+          || request.auth.token.role == 'admin'
+          || request.auth.token.moderator == true
+          || request.auth.token.admin == true
+        );
+    }
+
+    match /monthly-reports/{reportFile=**} {
+      allow read: if isVerifiedManager();
+      // Trusted server jobs upload reports using the Admin SDK.
+      allow write: if false;
+    }
+
+    match /{otherFiles=**} {
+      allow read, write: if false;
+    }
+  }
+}
